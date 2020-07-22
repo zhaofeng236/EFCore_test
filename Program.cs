@@ -19,189 +19,94 @@ namespace EFCore_test
             Console.WriteLine("这个是EFCore 学习程序");
 
             //CreateDatabase();
-            //AddRecords();
 
-            //UpdateRecords();
-            //ChangeUntracked();
-            AddHundredRecords();
+            //AddTwoRecordsWithOneTx();
+            Console.WriteLine("\n\n");
+            AddTwoRecordsWithTwoTx();
 
             //DeleteDatabase();
             Console.ReadKey();
         }
 
-        //批处理
-        private static void AddHundredRecords()
-        {
-            Console.WriteLine(nameof(AddHundredRecords));
-            using(var context=new MenusContext())
-            {
-                var card = context.MenuCards.FirstOrDefault();
-                if (card != null)
-                {
-                    var menus = Enumerable.Range(1, 10000).Select(x => new Menu
-                    {
-                        MenuCard = card,
-                        Text = $"menu {x}",
-                        Price = 9.9m
-                    });
 
-                   context.Menus.AddRange(menus);
-                   
-                    Stopwatch stopwatch = Stopwatch.StartNew();
-                    int records =  context.SaveChanges();
-                    stopwatch.Stop();
-                    Console.WriteLine($"{records} 条记录被插入，用时" +
-                        $" {stopwatch.ElapsedMilliseconds} 毫秒");
+        private static void AddTwoRecordsWithOneTx()
+        {
+            Console.WriteLine(nameof(AddTwoRecordsWithOneTx));
+            try
+            {
+                using(var context=new MenusContext())
+                {
+                    var card = context.MenuCards.First();
+
+                    var m1 = new Menu
+                    {
+                        MenuCardId = card.MenuCardId,
+                        Text = "added",
+                        Price = 99.99m
+                    };
+
+                    int hightestCardId = context.MenuCards.Max(c => c.MenuCardId);
+                    Console.WriteLine($"最大的Id为：{ hightestCardId}");
+
+                    var mInvalid = new Menu
+                    {
+                        MenuCardId = ++hightestCardId,
+                        Text = "invalid", Price = 999.99m
+                    };
+
+                    Console.WriteLine($"m1的MenuCardId={m1.MenuCardId}");
+                    Console.WriteLine($"mInvalid的MenuCardId={mInvalid.MenuCardId}");
+
+                    context.Menus.AddRange(m1, mInvalid);
+
+                    Console.WriteLine("trying to add one invalid record to the database, this should fail...");
+                    int records = context.SaveChanges();
+                    Console.WriteLine($"{records} 条记录被增加！");
                 }
-                Console.WriteLine();
             }
+            catch(DbUpdateException ex)
+            {
+                Console.WriteLine($"{ex.Message}");
+                Console.WriteLine($"{ex?.InnerException.Message}");
+            }
+            Console.WriteLine();
         }
 
-        private static void AddRecords()
+
+
+        //一个SaveChanges插入一次
+        private static void AddTwoRecordsWithTwoTx()
         {
-            Console.WriteLine(nameof(AddRecords));
+            Console.WriteLine(nameof(AddTwoRecordsWithTwoTx));
             try
             {
                 using (var context = new MenusContext())
                 {
-                    var soupCard = new MenuCard();
-                    Menu[] soups =
-                    {
-                        new Menu
-                        {
-                            Text="红烧钳子",
-                            Price=28m,
-                            MenuCard=soupCard
-                        },
+                    Console.WriteLine("adding two records with two transactions to the database. One record should be written, the other not....");
+                    var card = context.MenuCards.First();
+                    var m1 = new Menu { MenuCardId = card.MenuCardId, Text = "added", Price = 99.99m };
 
-                        new Menu
-                        {
-                            Text="白族生肉",
-                            Price=40m,
-                            MenuCard=soupCard
-                        },
-
-                        new Menu
-                        {
-                            Text="宾川海稍鱼",
-                            Price=88m,
-                            MenuCard=soupCard
-                        },
-
-                        new Menu
-                        {
-                            Text="丽江腊排骨",
-                            Price=68m,
-                            MenuCard=soupCard
-                        },
-                    };
-
-                    soupCard.Title = "Soups";
-                    soupCard.Menus.AddRange(soups);
-                    context.MenuCards.Add(soupCard);
-
-                    ShowState(context);
+                    context.Menus.Add(m1);
                     int records = context.SaveChanges();
-                    Console.WriteLine($"{records} 条记录被插入!");
-                    Console.WriteLine();
+                    Console.WriteLine($"{records} records added");
+
+                    int hightestCardId = context.MenuCards.Max(c => c.MenuCardId);
+                    var mInvalid = new Menu { MenuCardId = ++hightestCardId, Text = "invalid", Price = 999.99m };
+                    context.Menus.Add(mInvalid);
+
+                    records = context.SaveChanges();
+                    Console.WriteLine($"{records} records added");
                 }
             }
-            catch (Exception ex)
+            catch (DbUpdateException ex)
             {
-                Console.WriteLine(ex.Message);
-            }
-            Console.WriteLine();
-        }
-
-        //==显示状态==
-        //==ChangeTracker的Entries方法返回变更跟踪器的对象==
-        public static void ShowState(MenusContext context)
-        {
-            foreach (EntityEntry entry in context.ChangeTracker.Entries())
-            {
-                Console.WriteLine($"类型：{entry.Entity.GetType().Name}," +
-                    $"状态:{entry.State},{entry.Entity}");
-            }
-        }
-
-        private static void ObjectTracking()
-        {
-            Console.WriteLine(nameof(ObjectTracking));
-            using (var context = new MenusContext())
-            {
-                var m1 = (from m in context.Menus
-                          where m.Text.StartsWith("Con")
-                          select m).FirstOrDefault();
-
-                var m2 = (from m in context.Menus
-                          where m.Text.Contains("(")
-                          select m).FirstOrDefault();
-
-                if (object.ReferenceEquals(m1, m2))
-                {
-                    Console.WriteLine("对象相同！");
-                }
-                else
-                {
-                    Console.WriteLine("对象不相同！");
-                }
-                ShowState(context);
-            }
-            Console.WriteLine();
-        }
-
-        //更新对象
-        private static void UpdateRecords()
-        {
-            Console.WriteLine(nameof(UpdateRecords));
-            using(var context=new MenusContext())
-            {
-                Menu menu = context.Menus
-                    .Skip(1)
-                    .FirstOrDefault();
-
-                ShowState(context);
-                menu.Price += 20m;
-                ShowState(context);
-
-                int records = context.SaveChanges();
-                Console.WriteLine($"{records} 条记录被更新！");
-                ShowState(context);
+                Console.WriteLine($"{ex.Message}");
+                Console.WriteLine($"{ex?.InnerException.Message}");
             }
             Console.WriteLine();
         }
 
 
-        private static void ChangeUntracked()
-        {
-            Console.WriteLine(nameof(ChangeUntracked));
-            Menu GetMenu()
-            {
-                using(var context=new MenusContext())
-                {
-                    Menu menu = context.Menus
-                        .Skip(0)
-                        .FirstOrDefault();
-                    return menu;
-                }
-            }
-
-            Menu m = GetMenu();
-            m.Price += 50m;
-            UpdateUntracked(m);
-        }
-
-        private static void UpdateUntracked(Menu m)
-        {
-            using(var context=new MenusContext())
-            {
-                ShowState(context);
-                context.Menus.Update(m);
-
-                ShowState(context);
-                context.SaveChanges();
-            }
-        }
 
 
         //创建数据库及数据表
